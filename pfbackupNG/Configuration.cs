@@ -59,7 +59,6 @@ namespace pfbackupNG
         }
         public string BuildGlobalDefault()
         {
-            Global.EncryptionKey = $"ChangeThisToSomethingMoreSecure";
             Global.Azure.ConnectionString = $"AzureBlobStorageConnectionString";
             Global.Azure.Container = $"AzureBlobStorageContainer";
             try { return JsonConvert.SerializeObject(Global, Formatting.Indented); }
@@ -74,7 +73,7 @@ namespace pfbackupNG
                     Port = 80,
                     UseSSL = false,
                     PollInterval = new PollInterval(),
-                    Credentials = new DeviceConfigurationCredentials("Username 1","Password 1"),
+                    Credentials = new NetworkCredential("Username 1","Password 1"),
                     Version = DeviceConfiguration.DeviceConfigurationVersion.V233_LATER
                 },
                 new DeviceConfiguration() {
@@ -83,7 +82,7 @@ namespace pfbackupNG
                     Port = 443,
                     UseSSL = true,
                     PollInterval = new PollInterval(),
-                    Credentials = new DeviceConfigurationCredentials("Username 2","Password 2"),
+                    Credentials = new NetworkCredential("Username 2","Password 2"),
                     Version = DeviceConfiguration.DeviceConfigurationVersion.V226_V232P1
                 }
             };
@@ -92,12 +91,10 @@ namespace pfbackupNG
         }
     }
     public class GlobalConfiguration
-    { 
-        public string EncryptionKey { get; set; }
+    {
         public AzureConfiguration Azure { get; set; }
         public GlobalConfiguration()
         {
-            EncryptionKey = String.Empty;
             Azure = new AzureConfiguration();
         }
     }
@@ -116,20 +113,6 @@ namespace pfbackupNG
     {
         public string Username { get; set; }
         public string Password { get; set; }
-        public DeviceConfigurationCredentials()
-        {
-            Username = String.Empty;
-            Password = String.Empty;
-        }
-        public DeviceConfigurationCredentials(string Username, string Password)
-        {
-            if (String.IsNullOrWhiteSpace(Username))
-                throw new ArgumentNullException("Username cannot be null, empty, or whitespace.");
-            if (String.IsNullOrEmpty(Password))
-                throw new ArgumentNullException("Password cannot be null or empty.");
-            this.Username = Username;
-            this.Password = Password;
-        }
     }
     public class DeviceConfiguration
     {
@@ -146,7 +129,7 @@ namespace pfbackupNG
         public bool UseSSL { get; set; }
         /* string Username { get; set; }
         public SecureString Password { get; set; }*/
-        public DeviceConfigurationCredentials Credentials { get; set; }
+        public NetworkCredential Credentials { get; set; }
         public PollInterval PollInterval { get; set; }
         public DeviceConfigurationVersion Version { get; set; }
         public DeviceConfiguration()
@@ -155,7 +138,7 @@ namespace pfbackupNG
             Name = string.Empty;
             Address = string.Empty;
             PollInterval = new PollInterval();
-            Credentials = new DeviceConfigurationCredentials();
+            Credentials = new NetworkCredential();
         }
         public string GetRequestUrl()
         {
@@ -171,13 +154,13 @@ namespace pfbackupNG
     }
     public static class DataProtectionExtensions
     {
-        public static string pfbackup_Encrypt(this string PlainText, string Key)
+        public static string pfbackup_Encrypt(this string PlainText, string objKeycode)
         {
             try
             {
-                byte[] objInitVectorBytes = Encoding.UTF8.GetBytes($"m_4qh&TMX_zfqq@Rhj!CEL8H");
+                byte[] objInitVectorBytes = Encoding.UTF8.GetBytes("HR$2pIjHR$2pIj12");
                 byte[] objPlainTextBytes = Encoding.UTF8.GetBytes(PlainText);
-                Rfc2898DeriveBytes objPassword = new Rfc2898DeriveBytes(Key, objInitVectorBytes);
+                Rfc2898DeriveBytes objPassword = new Rfc2898DeriveBytes(objKeycode, objInitVectorBytes);
                 byte[] objKeyBytes = objPassword.GetBytes(256 / 8);
                 Aes objSymmetricKey = Aes.Create();
                 objSymmetricKey.Mode = CipherMode.CBC;
@@ -197,7 +180,7 @@ namespace pfbackupNG
         {
             try
             {
-                byte[] objInitVectorBytes = Encoding.ASCII.GetBytes($"m_4qh&TMX_zfqq@Rhj!CEL8H");
+                byte[] objInitVectorBytes = Encoding.ASCII.GetBytes("HR$2pIjHR$2pIj12");
                 byte[] objDeEncryptedText = Convert.FromBase64String(EncryptedText);
                 Rfc2898DeriveBytes objPassword = new Rfc2898DeriveBytes(Key, objInitVectorBytes);
                 byte[] objKeyBytes = objPassword.GetBytes(256 / 8);

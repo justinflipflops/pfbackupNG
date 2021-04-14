@@ -1,0 +1,7 @@
+{
+  "EncryptionKey": "ChangeThisToSomethingMoreSecure",
+  "Azure": {
+    "ConnectionString": "AzureBlobStorageConnectionString",
+    "Container": "AzureBlobStorageContainer"
+  }
+}

@@ -1,0 +1,36 @@
+[
+  {
+    "Enabled": false,
+    "Name": "Example 1",
+    "Address": "0.0.0.0",
+    "Port": 80,
+    "UseSSL": false,
+    "Credentials": {
+      "Username": "Username 1",
+      "Password": "Password 1",
+      "Encrypted": false
+    },
+    "PollInterval": {
+      "Minimum": "00:00:00",
+      "Maximum": "00:00:00"
+    },
+    "Version": "V233_LATER"
+  },
+  {
+    "Enabled": false,
+    "Name": "Example 2",
+    "Address": "0.0.0.0",
+    "Port": 443,
+    "UseSSL": true,
+    "Credentials": {
+      "Username": "Username 2",
+      "Password": "Password 2",
+      "Encrypted": false
+    },
+    "PollInterval": {
+      "Minimum": "00:00:00",
+      "Maximum": "00:00:00"
+    },
+    "Version": "V226_V232P1"
+  }
+]
