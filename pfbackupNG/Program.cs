@@ -20,7 +20,7 @@ namespace pfbackupNG
         private static string device_settings_configuration_directory = string.Empty;
         private static string device_settings_configuration_full_path = string.Empty;
         private static string device_settings_configuration_name = (System.Diagnostics.Debugger.IsAttached ? "devices.development.config" : "devices.config");
-        public static void Main(bool BuildDefaultGlobalConfig = false, bool BuildDefaultDeviceConfig = false, FileInfo GlobalSettingsConfigFile = null, FileInfo DeviceSettingsConfigFile = null)
+        public static void Main(bool BuildDefaultGlobalConfig = false, bool BuildDefaultDeviceConfig = false, FileInfo GlobalSettingsConfigFile = null, FileInfo DeviceSettingsConfigFile = null, bool EncryptCredentials = false)
         {
             global_settings_configuration_directory = $"{System.IO.Path.GetDirectoryName(new System.Uri(System.Reflection.Assembly.GetExecutingAssembly().Location).LocalPath)}/";
             device_settings_configuration_directory = $"{System.IO.Path.GetDirectoryName(new System.Uri(System.Reflection.Assembly.GetExecutingAssembly().Location).LocalPath)}/";
@@ -69,7 +69,22 @@ namespace pfbackupNG
                 Log.Error(_ex, $"Error loading application configuration file {global_settings_configuration_full_path}");
                 return;
             }
-
+            if (EncryptCredentials)
+            {
+                Log.Information($"Processing device credentials");
+                foreach(DeviceConfiguration _device in _Configuration.Devices)
+                {
+                    if (_device.Credentials.Encrypted == false)
+                    {
+                        _device.Credentials.Password = _device.Credentials.Password.pfbackup_Encrypt(_Configuration.Global.EncryptionKey);
+                        _device.Credentials.Encrypted = true;
+                    }
+                }
+                Log.Information($"Saving updated device configurations");
+                _Configuration.Save(false, true);
+                Log.Information($"Saved updated device configurations.\r\nExiting.");
+                return;
+            }
             Log.Information($"Application starting.");
             _Host = CreateHostBuilder().UseSerilog().Build();
             _Host.Run();
