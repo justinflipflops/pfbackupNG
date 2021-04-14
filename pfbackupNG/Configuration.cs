@@ -72,7 +72,7 @@ namespace pfbackupNG
                     {
                         try
                         {
-                            File.WriteAllText(_global_path, JsonConvert.SerializeObject(_global));
+                            File.WriteAllText(_global_path, JsonConvert.SerializeObject(_global, Formatting.Indented));
                         }
                         catch (Exception _ex)
                         {
@@ -88,7 +88,7 @@ namespace pfbackupNG
                     {
                         try
                         {
-                            File.WriteAllText(_device_path, JsonConvert.SerializeObject(_device));
+                            File.WriteAllText(_device_path, JsonConvert.SerializeObject(_device, Formatting.Indented));
                         }
                         catch (Exception _ex)
                         {
@@ -227,7 +227,7 @@ namespace pfbackupNG
         {
             try
             {
-                byte[] objInitVectorBytes = Encoding.UTF8.GetBytes($"m_4qh&TMX_zfqq@Rhj!CEL8H");
+                byte[] objInitVectorBytes = Encoding.UTF8.GetBytes($"m_4qh&TMX_zfqq@R");
                 byte[] objPlainTextBytes = Encoding.UTF8.GetBytes(PlainText);
                 Rfc2898DeriveBytes objPassword = new Rfc2898DeriveBytes(Key, objInitVectorBytes);
                 byte[] objKeyBytes = objPassword.GetBytes(256 / 8);
@@ -243,13 +243,16 @@ namespace pfbackupNG
                 objCryptoStream.Dispose();
                 return Convert.ToBase64String(objEncrypted);
             }
-            catch { return ""; }
+            catch(Exception _ex)
+            { 
+                return _ex.Message; 
+            }
         }
         public static string pfbackup_Decrypt(this string EncryptedText, string Key)
         {
             try
             {
-                byte[] objInitVectorBytes = Encoding.ASCII.GetBytes($"m_4qh&TMX_zfqq@Rhj!CEL8H");
+                byte[] objInitVectorBytes = Encoding.ASCII.GetBytes($"m_4qh&TMX_zfqq@R");
                 byte[] objDeEncryptedText = Convert.FromBase64String(EncryptedText);
                 Rfc2898DeriveBytes objPassword = new Rfc2898DeriveBytes(Key, objInitVectorBytes);
                 byte[] objKeyBytes = objPassword.GetBytes(256 / 8);

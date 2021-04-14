@@ -15,4 +15,19 @@
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0-dev-00909" />
     <PackageReference Include="System.CommandLine.DragonFruit" Version="0.3.0-alpha.20574.7" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="devices.development.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Update="devices.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Update="global.development.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Update="global.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

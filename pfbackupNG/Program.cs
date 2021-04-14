@@ -15,11 +15,11 @@ namespace pfbackupNG
         private static Configuration _Configuration = new Configuration();
         private static string global_settings_configuration_directory = string.Empty;
         private static string global_settings_configuration_full_path = string.Empty;
-        private static string global_settings_configuration_name = (System.Diagnostics.Debugger.IsAttached ? "global.development.config" : "global.config");
+        private static string global_settings_configuration_name = (System.Diagnostics.Debugger.IsAttached ? "global.development.json" : "global.json");
 
         private static string device_settings_configuration_directory = string.Empty;
         private static string device_settings_configuration_full_path = string.Empty;
-        private static string device_settings_configuration_name = (System.Diagnostics.Debugger.IsAttached ? "devices.development.config" : "devices.config");
+        private static string device_settings_configuration_name = (System.Diagnostics.Debugger.IsAttached ? "devices.development.json" : "devices.json");
         public static void Main(bool BuildDefaultGlobalConfig = false, bool BuildDefaultDeviceConfig = false, FileInfo GlobalSettingsConfigFile = null, FileInfo DeviceSettingsConfigFile = null, bool EncryptCredentials = false)
         {
             global_settings_configuration_directory = $"{System.IO.Path.GetDirectoryName(new System.Uri(System.Reflection.Assembly.GetExecutingAssembly().Location).LocalPath)}/";
@@ -94,7 +94,7 @@ namespace pfbackupNG
 
         public static IHostBuilder CreateHostBuilder()
         {
-            Log.Debug($"Adding device monitors.");
+            Log.Debug($"Starting backup workers.");
             IHostBuilder _builder = Host.CreateDefaultBuilder()
             .ConfigureServices((hostContext, services) =>
             {
@@ -103,13 +103,13 @@ namespace pfbackupNG
                     if (_device.Enabled)
                     {
                         services.AddSingleton<IHostedService>(sp => new BackupWorker(_Configuration.Global, _device));
-                        Log.Debug($"Added device monitor for {_device.Name}.");
+                        Log.Debug($"Added backup worker for {_device.Name}.");
                     }
                     else
-                        Log.Debug($"Skipped device monitor for {_device.Name}, disabled.");
+                        Log.Debug($"Skipped backup worker for {_device.Name}, disabled.");
                 }
             });
-            Log.Debug($"Device monitors added.");
+            Log.Debug($"Backup workers started.");
             IHostBuilder _result = null;
             Log.Debug($"Detected {OperatingSystem.Type} operating system.");
             switch (OperatingSystem.Type)
