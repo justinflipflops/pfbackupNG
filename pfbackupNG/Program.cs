@@ -1,7 +1,10 @@
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -69,6 +72,10 @@ namespace pfbackupNG
                 Log.Error(_ex, $"Error loading application configuration file {global_settings_configuration_full_path}");
                 return;
             }
+            //blob testing
+            //BinaryData _data = new BinaryData(System.IO.File.ReadAllBytes("C:\\Temp\\global.development.json"));
+            //UploadBlobWithMaxVersions("test/ACS Office.json", _data, 1);
+
             if (EncryptCredentials)
             {
                 Log.Information($"Processing device credentials");
@@ -91,7 +98,34 @@ namespace pfbackupNG
             Log.Information($"Application shut down.");
 
         }
-
+        public class BlobItemVersionComparer : IComparer
+        {
+            // Call CaseInsensitiveComparer.Compare with the parameters reversed.
+            public int Compare(Object x, Object y)
+            {
+                return (new CaseInsensitiveComparer()).Compare(((BlobItem)y).VersionId, ((BlobItem)x).VersionId);
+            }
+        }
+        public static bool UploadBlobWithMaxVersions(string BlobName, BinaryData BlobData, uint MaxVersions)
+        {
+            BlobContainerClient _blobTestClient = new BlobContainerClient(_Configuration.Global.Azure.ConnectionString, _Configuration.Global.Azure.Container);
+            BlobClient _blobClient = _blobTestClient.GetBlobClient(BlobName);
+            Azure.Response<Azure.Storage.Blobs.Models.BlobContentInfo> _UploadResult = null;
+            try
+            {
+                //_UploadResult = _blobClient.Upload(BlobData, true);
+            }
+            catch { return false; }
+            //pruning
+            Azure.Pageable<BlobItem> _blobVersionsPages = _blobTestClient.GetBlobs(default, BlobStates.All, "test/");
+            BlobItem[] _blobVersionsArray = _blobVersionsPages.ToArray();
+            Array.Sort(_blobVersionsArray, new BlobItemVersionComparer());
+            foreach (BlobItem _blobVersionsPage in _blobVersionsArray)
+            {
+                string versionId = _blobVersionsPage.VersionId;
+            }
+            return true;
+        }
         public static IHostBuilder CreateHostBuilder()
         {
             Log.Debug($"Starting backup workers.");

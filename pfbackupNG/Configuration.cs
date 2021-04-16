@@ -209,16 +209,14 @@ namespace pfbackupNG
             PollInterval = new PollInterval();
             Credentials = new DeviceConfigurationCredentials();
         }
-        public string GetRequestUrl()
+        public Uri GetRequestUri()
         {
             StringBuilder _builder = new StringBuilder();
-            if (UseSSL)
-                _builder.Append($"https");
-            else
-                _builder.Append($"http");
+            _ = UseSSL == true ? _builder.Append($"https") :  _builder.Append($"http");
             _builder.Append($"://");
             _builder.Append($"{Address}:{Port}");
-            return _builder.ToString();
+            _builder.Append("/diag_backup.php");
+            return new Uri(_builder.ToString());
         }
     }
     public static class DataProtectionExtensions
