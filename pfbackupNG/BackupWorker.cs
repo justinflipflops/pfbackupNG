@@ -264,14 +264,6 @@ namespace pfbackupNG
                 catch { }
             }
         }
-        public class BlobItemVersionComparer : IComparer
-        {
-            // Call CaseInsensitiveComparer.Compare with the parameters reversed.
-            public int Compare(Object x, Object y)
-            {
-                return (new CaseInsensitiveComparer()).Compare(((BlobItem)y).Properties.LastModified, ((BlobItem)x).Properties.LastModified);
-            }
-        }
         private XmlDocument StringToXML(string XmlDataAsString)
         {
             try
