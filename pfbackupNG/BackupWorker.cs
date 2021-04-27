@@ -14,6 +14,10 @@ using System.Linq.Expressions;
 using System.Security.Authentication;
 using System.Xml;
 using System.Security.Cryptography;
+using System.Diagnostics.Eventing.Reader;
+using Azure.Storage.Blobs.Models;
+using System.Collections;
+using System.IO;
 
 namespace pfbackupNG
 {
@@ -49,7 +53,7 @@ namespace pfbackupNG
                 Dictionary<string, string> _HttpClientRequestParameters = new Dictionary<string, string>();
                 HttpResponseMessage _httpResponseMessage = null;
                 _HttpClientRequestParameters["__csrf_magic"] = String.Empty;
-                XmlDocument _currentDeviceBackup = null;
+
                 //Phase 1
                 try
                 {
@@ -116,6 +120,8 @@ namespace pfbackupNG
                     Log.Debug($"Backup[{_Device.Name}] Phase 2 - Skipped. Reason: Missing __csrf_magic. Check log for previous errors.");
 
                 //Phase 3
+                XmlDocument _currentDeviceBackup = null;
+                string _currentDeviceBackupName = String.Empty;
                 if (_HttpClientRequestParameters["__csrf_magic"] != String.Empty)
                 {
                     try
@@ -141,6 +147,8 @@ namespace pfbackupNG
                         }
                         _HttpClientRequestParameters.Add("encrypt_password", "");
                         _HttpClientRequestParameters.Add("encrypt_passconf", "");
+                        _currentDeviceBackup = null;
+                        _currentDeviceBackupName = String.Empty;
                         _httpResponseMessage = await _HttpClient.PostAsync(_Device.GetRequestUri(), new FormUrlEncodedContent(_HttpClientRequestParameters),_stoppingToken);
                         if (_httpResponseMessage.StatusCode == HttpStatusCode.OK)
                         {
@@ -148,7 +156,7 @@ namespace pfbackupNG
                             _currentDeviceBackup = StringToXML(_httpResponseMessageAsString);
                             if (_currentDeviceBackup == null)
                                 throw new XmlException("Invalid backup file type returned. Expected XML.");
-
+                            _currentDeviceBackupName = _httpResponseMessage.Content.Headers.ContentDisposition.FileName;
                             Log.Debug($"Backup[{_Device.Name}] Phase 3 - pfSense Backup Received.");
                             _HttpClientRequestParameters.Remove("backuparea");
                             _HttpClientRequestParameters.Remove("donotbackuprrd");
@@ -164,6 +172,7 @@ namespace pfbackupNG
                     catch (Exception _Phase3Exception)
                     {
                         _currentDeviceBackup = null;
+                        _currentDeviceBackupName = String.Empty;
                         _HttpClientRequestParameters["__csrf_magic"] = String.Empty;
                         Log.Error(_Phase3Exception, $"Backup[{_Device.Name}] Phase 3 - Failed. Reason: See Exception.");
                     }
@@ -173,22 +182,79 @@ namespace pfbackupNG
                     Log.Debug($"Backup[{_Device.Name}] Phase 3 - Skipped. Reason: Missing __csrf_magic. Check log for previous errors.");
 
                 //Phase 4 - Upload to Azure!!!
-                if (_currentDeviceBackup != null)
+                Azure.Response<Azure.Storage.Blobs.Models.BlobContentInfo> _blobClientUploadResult = null;
+                if (_currentDeviceBackup != null && !String.IsNullOrWhiteSpace(_currentDeviceBackupName))
                 {
                     try
                     {
                         Log.Information($"Backup[{_Device.Name}] Phase 4 - Started.");
                         Log.Debug($"Backup[{_Device.Name}] Phase 4 - Attempting pfSense backup upload.");
-                        //using (BlobClient _BlobClient = _BlobContainerClient.GetBlobClient())
+                        BlobClient _blobClient = _BlobContainerClient.GetBlobClient($"{_Device.Name.GetSafeString()}/{_currentDeviceBackupName.GetSafeString()}");
+                        _blobClientUploadResult = await _blobClient.UploadAsync(new BinaryData(XMLToString(_currentDeviceBackup).ToArray()), _stoppingToken);
+                        if (_blobClientUploadResult != null && _blobClientUploadResult.GetRawResponse().Status == (int)HttpStatusCode.Created)
+                        {
+                            Log.Debug($"Backup[{_Device.Name}] Phase 4 - pfSense Backup uploaded.");
+                            _currentDeviceBackup = null;
+                            _currentDeviceBackupName = String.Empty;
+                        }
+                        else
+                            throw new Azure.RequestFailedException("Client Upload Result was NULL or INVALID");
                     }
                     catch(Exception _Phase4Exception)
                     {
                         _currentDeviceBackup = null;
+                        _currentDeviceBackupName = String.Empty;
+                        _blobClientUploadResult = null;
                         Log.Error(_Phase4Exception, $"Backup[{_Device.Name}] Phase 4 - Failed. Reason: See Exception.");
                     }
                 }
                 else
                     Log.Debug($"Backup[{_Device.Name}] Phase 4 - Skipped. Reason: Invalid pfSense backup file. Check log for previous errors.");
+
+                //Phase 5 - We Prune
+                if (_blobClientUploadResult != null)
+                {
+                    try
+                    {
+                        Log.Information($"Backup[{_Device.Name}] Phase 5 - Started.");
+                        Log.Debug($"Backup[{_Device.Name}] Phase 5 - Pruning pfSense backups");
+                        IAsyncEnumerable<Azure.Page<BlobItem>> _blobItemPages = _BlobContainerClient.GetBlobsAsync(default, BlobStates.All, $"{_Device.Name}/", _stoppingToken).AsPages(default, _Device.MaxRetention);
+                        List<BlobItem> _blobItemsList = new List<BlobItem>();
+                        await foreach(Azure.Page<BlobItem> _blobItemPage in _blobItemPages)
+                        {
+                            foreach(var _blobItem in _blobItemPage.Values)
+                            {
+                                _blobItemsList.Add(_blobItem);
+                            }
+                        }
+                        if (_blobItemsList.Count > _Device.MaxRetention)
+                        {
+                            _blobItemsList.Sort(delegate (BlobItem x, BlobItem y)
+                            {
+                                return x.Properties.LastModified.Value.CompareTo(y.Properties.LastModified.Value);
+                            });
+                            while(_blobItemsList.Count > _Device.MaxRetention)
+                            {
+                                Azure.Response _blobDeleteResult = await _BlobContainerClient.DeleteBlobAsync(_blobItemsList[0].Name, DeleteSnapshotsOption.IncludeSnapshots, default, _stoppingToken);
+                                if (_blobDeleteResult == null && _blobDeleteResult.Status != (int)HttpStatusCode.Accepted)
+                                {
+                                    throw new Azure.RequestFailedException("Blob deleteion response was NULL or INVALID");
+                                }
+                                else
+                                    _blobItemsList.RemoveAt(0);
+                            }
+                            Log.Debug($"Backup[{_Device.Name}] Phase 5 - pfSense Backups pruned.");
+                        }
+                        else
+                            Log.Debug($"Backup[{_Device.Name}] Phase 5 - Pruning pfSense Backups unnecessary.");
+                    }
+                    catch (Exception _Phase5Exception)
+                    {
+                        _blobClientUploadResult = null;
+                        Log.Error(_Phase5Exception, $"Backup[{_Device.Name}] Phase 5 - Failed. Reason: See Exception.");
+                    }
+                }
+
                 TimeSpan _jitter = _Device.PollInterval.Next();
                 Log.Debug($"Backup[{_Device.Name}] sleeping for {_jitter}");
                 try
@@ -198,7 +264,14 @@ namespace pfbackupNG
                 catch { }
             }
         }
-
+        public class BlobItemVersionComparer : IComparer
+        {
+            // Call CaseInsensitiveComparer.Compare with the parameters reversed.
+            public int Compare(Object x, Object y)
+            {
+                return (new CaseInsensitiveComparer()).Compare(((BlobItem)y).Properties.LastModified, ((BlobItem)x).Properties.LastModified);
+            }
+        }
         private XmlDocument StringToXML(string XmlDataAsString)
         {
             try
@@ -214,6 +287,24 @@ namespace pfbackupNG
                 return null;
             }
             return null;
+        }
+        private string XMLToString(XmlDocument XmlDataAsXmlDocument)
+        {
+            string _result = String.Empty;
+            try
+            {
+                using (StringWriter _stringWriter = new StringWriter())
+                using (XmlTextWriter _xmlTextWriter = new XmlTextWriter(_stringWriter))
+                {
+                    XmlDataAsXmlDocument.WriteTo(_xmlTextWriter);
+                    _result = _stringWriter.ToString();
+                }
+            }
+            catch
+            {
+                _result = String.Empty;
+            }
+            return _result;
         }
         private string GetCsrfMagic(string Response)
         {

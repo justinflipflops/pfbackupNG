@@ -14,7 +14,8 @@
       "Minimum": "00:00:00",
       "Maximum": "00:00:00"
     },
-    "Version": "V233_LATER"
+    "Version": "V233_LATER",
+    "MaxRetention": 5
   },
   {
     "Enabled": false,
@@ -31,6 +32,7 @@
       "Minimum": "00:00:00",
       "Maximum": "00:00:00"
     },
-    "Version": "V226_V232P1"
+    "Version": "V226_V232P1",
+    "MaxRetention": 5
   }
 ]
