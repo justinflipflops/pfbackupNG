@@ -243,7 +243,7 @@ namespace pfbackupNG
             _builder.Append($"{Address}:{Port}");
             return new Uri(_builder.ToString());
         }
-        public Uri GetBackupRequestUri()
+        public Uri GetRequestBackupUri()
         {
             StringBuilder _builder = new StringBuilder();
             _ = UseSSL == true ? _builder.Append($"https") : _builder.Append($"http");
