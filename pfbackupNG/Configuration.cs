@@ -118,20 +118,28 @@ namespace pfbackupNG
                     Address = $"0.0.0.0",
                     Port = 80,
                     UseSSL = false,
-                    PollInterval = new PollInterval(),
                     Credentials = new DeviceConfigurationCredentials("Username 1","Password 1"),
                     Version = DeviceConfiguration.DeviceConfigurationVersion.V233_LATER,
-                    MaxRetention = 5
+                    Backup = new DeviceConfigurationBackup()
+                    {
+                        Time = new DateTime(DateTime.Now.Year,DateTime.Now.Month,DateTime.Now.Day,18,0,0,0),
+                        Retention = 30,
+                        Jitter = new PollInterval(new TimeSpan(0,0,30,0)) 
+                    }
                 },
                 new DeviceConfiguration() {
                     Name = $"Example 2",
                     Address = $"0.0.0.0",
                     Port = 443,
                     UseSSL = true,
-                    PollInterval = new PollInterval(),
                     Credentials = new DeviceConfigurationCredentials("Username 2","Password 2"),
                     Version = DeviceConfiguration.DeviceConfigurationVersion.V226_V232P1,
-                    MaxRetention = 5
+                    Backup = new DeviceConfigurationBackup()
+                    {
+                        Time = new DateTime(DateTime.Now.Year,DateTime.Now.Month,DateTime.Now.Day,5,0,0,0),
+                        Retention = 30,
+                        Jitter = new PollInterval(new TimeSpan(0,1,0,0))
+                    }
                 }
             };
             try { return JsonConvert.SerializeObject(Devices, Formatting.Indented); }
@@ -185,6 +193,19 @@ namespace pfbackupNG
             this.Encrypted = Encrypted;
         }
     }
+    public class DeviceConfigurationBackup
+    {
+        [JsonConverter(typeof(BackupDateTimeConverter))]
+        public DateTime Time { get; set; }
+        public PollInterval Jitter { get; set; }
+        public int Retention { get; set; }
+        public DeviceConfigurationBackup()
+        {
+            Time = new DateTime();
+            Jitter = new PollInterval();
+            Retention = 0;
+        }
+    }
     public class DeviceConfiguration
     {
         public enum DeviceConfigurationVersion
@@ -200,17 +221,19 @@ namespace pfbackupNG
         public bool UseSSL { get; set; }
         
         public DeviceConfigurationCredentials Credentials { get; set; }
-        public PollInterval PollInterval { get; set; }
+
+        [JsonConverter(typeof(StringEnumConverter))]
         public DeviceConfigurationVersion Version { get; set; }
-        public int MaxRetention { get; set; }
+
+        public DeviceConfigurationBackup Backup { get; set; }
+
         public DeviceConfiguration()
         {
             Enabled = false;
             Name = string.Empty;
             Address = string.Empty;
-            PollInterval = new PollInterval();
             Credentials = new DeviceConfigurationCredentials();
-            MaxRetention = 0;
+            Backup = new DeviceConfigurationBackup();
         }
         public Uri GetRequestUri()
         {
@@ -220,6 +243,36 @@ namespace pfbackupNG
             _builder.Append($"{Address}:{Port}");
             _builder.Append("/diag_backup.php");
             return new Uri(_builder.ToString());
+        }
+    }
+    public class BackupDateTimeConverter : JsonConverter
+    {
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            if (reader.Value == null)
+            {
+                return null;
+            }
+
+            var s = reader.Value.ToString();
+            DateTime result;
+            if (DateTime.TryParseExact(s, "hh:mm:ss tt", CultureInfo.InvariantCulture, DateTimeStyles.None, out result))
+            {
+                return result;
+            }
+
+            return DateTime.Now;
+        }
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            writer.WriteValue(((DateTime)value).ToString("hh:mm:ss tt"));
+        }
+        public override bool CanConvert(Type objectType)
+        {
+            if (objectType == typeof(DateTime))
+                return true;
+            else
+                return false;
         }
     }
 }

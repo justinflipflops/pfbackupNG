@@ -5,6 +5,20 @@ namespace pfbackupNG
     {
         private TimeSpan internal_Minimum = new TimeSpan();
         private TimeSpan internal_Maximum = new TimeSpan();
+        public PollInterval()
+        {
+
+        }
+
+        public PollInterval(TimeSpan Time) : this(TimeSpan.Zero, Time)
+        {
+
+        }
+        public PollInterval(TimeSpan Minimum, TimeSpan Maximum)
+        {
+            this.Minimum = Minimum;
+            this.Maximum = Maximum;
+        }
         public TimeSpan Minimum
         {
             get

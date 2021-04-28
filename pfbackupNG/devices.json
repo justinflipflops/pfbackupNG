@@ -10,12 +10,15 @@
       "Password": "Password 1",
       "Encrypted": false
     },
-    "PollInterval": {
-      "Minimum": "00:00:00",
-      "Maximum": "00:00:00"
-    },
     "Version": "V233_LATER",
-    "MaxRetention": 5
+    "Backup": {
+      "Time": "06:00:00 PM",
+      "Jitter": {
+        "Minimum": "00:00:00",
+        "Maximum": "00:30:00"
+      },
+      "Retention": 30
+    }
   },
   {
     "Enabled": false,
@@ -28,11 +31,14 @@
       "Password": "Password 2",
       "Encrypted": false
     },
-    "PollInterval": {
-      "Minimum": "00:00:00",
-      "Maximum": "00:00:00"
-    },
     "Version": "V226_V232P1",
-    "MaxRetention": 5
+    "Backup": {
+      "Time": "05:00:00 AM",
+      "Jitter": {
+        "Minimum": "00:00:00",
+        "Maximum": "01:00:00"
+      },
+      "Retention": 30
+    }
   }
 ]
