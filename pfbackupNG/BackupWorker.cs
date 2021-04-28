@@ -167,7 +167,7 @@ namespace pfbackupNG
                     _HttpClientRequestParameters.Add("encrypt_passconf", "");
                     _currentDeviceBackup = null;
                     _currentDeviceBackupName = String.Empty;
-                    _httpResponseMessage = await _HttpClient.PostAsync(_Device.GetRequestUri(), new FormUrlEncodedContent(_HttpClientRequestParameters), _stoppingToken);
+                    _httpResponseMessage = await _HttpClient.PostAsync(_Device.GetRequestBackupUri(), new FormUrlEncodedContent(_HttpClientRequestParameters), _stoppingToken);
                     if (_httpResponseMessage.StatusCode == HttpStatusCode.OK)
                     {
                         string _httpResponseMessageAsString = await _httpResponseMessage.Content.ReadAsStringAsync();

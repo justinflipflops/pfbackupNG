@@ -241,6 +241,14 @@ namespace pfbackupNG
             _ = UseSSL == true ? _builder.Append($"https") :  _builder.Append($"http");
             _builder.Append($"://");
             _builder.Append($"{Address}:{Port}");
+            return new Uri(_builder.ToString());
+        }
+        public Uri GetRequestBackupUri()
+        {
+            StringBuilder _builder = new StringBuilder();
+            _ = UseSSL == true ? _builder.Append($"https") : _builder.Append($"http");
+            _builder.Append($"://");
+            _builder.Append($"{Address}:{Port}");
             _builder.Append("/diag_backup.php");
             return new Uri(_builder.ToString());
         }
