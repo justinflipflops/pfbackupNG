@@ -28,6 +28,14 @@ namespace pfbackupNG
         private readonly HttpClientHandler _HttpClientHandler;
         private readonly BlobContainerClient _BlobContainerClient;
 
+        private enum BackupWorkerRunState
+        {
+            Phase1,
+            Phase2,
+            Phase3,
+            Phase4,
+            Phase5
+        }
         public BackupWorker(GlobalConfiguration Global, DeviceConfiguration Device)
         {
             if (Global == null || Device == null)
@@ -39,23 +47,21 @@ namespace pfbackupNG
             _HttpClientHandler.UseCookies = true;
             _HttpClientHandler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
             _HttpClient = new HttpClient(_HttpClientHandler);
-            _HttpClient.DefaultRequestHeaders.Add("User-Agent", "pfBackupNG v1.0-ALPHACENTAURI");
+            //_HttpClient.DefaultRequestHeaders.Add("User-Agent", "pfBackupNG v1.0-ALPHACENTAURI");
             _BlobContainerClient = new BlobContainerClient(_Global.Azure.ConnectionString, _Global.Azure.Container);
             Log.Information($"Backup[{_Device.Name}] Worker Service - Created.");
         }
         private TimeSpan GetTimeLeftTillNextRun(bool ExecuteIfMissed = false)
         {
-            TimeSpan _result;
             DateTime _now = DateTime.Now;
             DateTime _nextRun = new DateTime(_now.Year, _now.Month, _now.Day, _Device.Backup.Time.Hour, _Device.Backup.Time.Minute, _Device.Backup.Time.Second, _Device.Backup.Time.Millisecond);
             if (_now > _nextRun)
                 _nextRun = _nextRun.AddDays(1);
             TimeSpan _timeLeftUntilNextRun = new TimeSpan(0, 0, 0, 0);
             if (!ExecuteIfMissed)
-                _timeLeftUntilNextRun = (_nextRun - _now);
+                _timeLeftUntilNextRun = (_nextRun - _now)+ _Device.Backup.Jitter.Next();
 
-            _result = (_timeLeftUntilNextRun + _Device.Backup.Jitter.Next());
-            return _result;
+            return _timeLeftUntilNextRun;
         }
         public Task StartAsync(CancellationToken _cancellationToken)
         {
@@ -70,34 +76,38 @@ namespace pfbackupNG
             Log.Information($"Backup[{_Device.Name}] Task - Started");
             Dictionary<string, string> _HttpClientRequestParameters = new Dictionary<string, string>();
             HttpResponseMessage _httpResponseMessage = null;
-            _HttpClientRequestParameters["__csrf_magic"] = String.Empty;
-
+            BackupWorkerRunState _backupWorkerRunState = BackupWorkerRunState.Phase1;
             //Phase 1
             try
             {
                 Log.Information($"Backup[{_Device.Name}] Phase 1 - Started.");
-                Log.Debug($"Backup[{_Device.Name}] Phase 1 - Obtaining Initial __csrf_magic.");
+                Log.Debug($"Backup[{_Device.Name}] Phase 1 - Obtaining __csrf_magic.");
                 _httpResponseMessage = await _HttpClient.GetAsync(_Device.GetRequestUri(), _stoppingToken);
                 if (_httpResponseMessage.StatusCode == HttpStatusCode.OK)
                 {
                     string _httpResponseMessageAsString = await _httpResponseMessage.Content.ReadAsStringAsync();
                     _HttpClientRequestParameters["__csrf_magic"] = GetCsrfMagic(_httpResponseMessageAsString);
                     if (_HttpClientRequestParameters["__csrf_magic"] == String.Empty)
-                        throw new HttpRequestException("Invalid or missing __csrf_magic");
-                    Log.Debug($"Backup[{_Device.Name}] Phase 1 - Obtained Initial __csrf_magic.");
+                    {
+                        Log.Debug($"Backup[{_Device.Name}] Phase 1 - __csrf_magic missing may not needed. See additional log messages.");
+                        _HttpClientRequestParameters.Remove("__csrf_magic");
+                    }
+                    else
+                        Log.Debug($"Backup[{_Device.Name}] Phase 1 - Obtained __csrf_magic.");
+                    _backupWorkerRunState = BackupWorkerRunState.Phase2;
                 }
                 else
                     throw new HttpRequestException("Invalid HTTP Response Message Status Code", null, _httpResponseMessage.StatusCode);
             }
             catch (Exception _Phase1Exception)
             {
-                _HttpClientRequestParameters["__csrf_magic"] = String.Empty;
+                _HttpClientRequestParameters.Remove("__csrf_magic");
                 Log.Error(_Phase1Exception, $"Backup[{_Device.Name}] Phase 1 - Failed. Reason: See Exception.");
             }
             Log.Information($"Backup[{_Device.Name}] Phase 1 - Completed.");
 
             //Phase 2
-            if (_HttpClientRequestParameters["__csrf_magic"] != String.Empty)
+            if (_backupWorkerRunState == BackupWorkerRunState.Phase2)
             {
                 try
                 {
@@ -117,9 +127,14 @@ namespace pfbackupNG
 
                         _HttpClientRequestParameters["__csrf_magic"] = GetCsrfMagic(_httpResponseMessageAsString);
                         if (_HttpClientRequestParameters["__csrf_magic"] == String.Empty)
-                            throw new HttpRequestException("Invalid or missing __csrf_magic");
-                        Log.Debug($"Backup[{_Device.Name}] Phase 2 - Obtained __csrf_magic.");
+                        {
+                            _HttpClientRequestParameters.Remove("__csrf_magic");
+                            Log.Debug($"Backup[{_Device.Name}] Phase 2 - __csrf_magic missing may not needed. See additional log messages.");
+                        }
+                        else
+                            Log.Debug($"Backup[{_Device.Name}] Phase 2 - Obtained __csrf_magic.");
 
+                        _backupWorkerRunState = BackupWorkerRunState.Phase3;
                         _HttpClientRequestParameters.Remove("login");
                         _HttpClientRequestParameters.Remove("usernamefld");
                         _HttpClientRequestParameters.Remove("passwordfld");
@@ -129,18 +144,18 @@ namespace pfbackupNG
                 }
                 catch (Exception _Phase2Exception)
                 {
-                    _HttpClientRequestParameters["__csrf_magic"] = String.Empty;
+                    _HttpClientRequestParameters.Remove("__csrf_magic");
                     Log.Error(_Phase2Exception, $"Backup[{_Device.Name}] Phase 2 - Failed. Reason: See Exception.");
                 }
                 Log.Information($"Backup[{_Device.Name}] Phase 2 - Completed.");
             }
             else
-                Log.Debug($"Backup[{_Device.Name}] Phase 2 - Skipped. Reason: Missing __csrf_magic. Check log for previous errors.");
+                Log.Debug($"Backup[{_Device.Name}] Phase 2 - Skipped. Reason: Check log for previous errors.");
 
             //Phase 3
             XmlDocument _currentDeviceBackup = null;
             string _currentDeviceBackupName = String.Empty;
-            if (_HttpClientRequestParameters["__csrf_magic"] != String.Empty)
+            if (_backupWorkerRunState == BackupWorkerRunState.Phase3)
             {
                 try
                 {
@@ -167,41 +182,44 @@ namespace pfbackupNG
                     _HttpClientRequestParameters.Add("encrypt_passconf", "");
                     _currentDeviceBackup = null;
                     _currentDeviceBackupName = String.Empty;
-                    _httpResponseMessage = await _HttpClient.PostAsync(_Device.GetRequestUri(), new FormUrlEncodedContent(_HttpClientRequestParameters), _stoppingToken);
+                    _httpResponseMessage = await _HttpClient.PostAsync(_Device.GetBackupRequestUri(), new FormUrlEncodedContent(_HttpClientRequestParameters), _stoppingToken);
                     if (_httpResponseMessage.StatusCode == HttpStatusCode.OK)
                     {
                         string _httpResponseMessageAsString = await _httpResponseMessage.Content.ReadAsStringAsync();
                         _currentDeviceBackup = StringToXML(_httpResponseMessageAsString);
-                        if (_currentDeviceBackup == null)
-                            throw new XmlException("Invalid backup file type returned. Expected XML.");
                         _currentDeviceBackupName = _httpResponseMessage.Content.Headers.ContentDisposition.FileName;
+
+                        if (_currentDeviceBackup == null || String.IsNullOrWhiteSpace(_currentDeviceBackupName))
+                            throw new XmlException("Invalid backup file type returned. Expected XML.");
+
                         Log.Debug($"Backup[{_Device.Name}] Phase 3 - pfSense Backup Received.");
+                        _backupWorkerRunState = BackupWorkerRunState.Phase4;
                         _HttpClientRequestParameters.Remove("backuparea");
                         _HttpClientRequestParameters.Remove("donotbackuprrd");
                         _HttpClientRequestParameters.Remove("Submit");
                         _HttpClientRequestParameters.Remove("download");
                         _HttpClientRequestParameters.Remove("encrypt_password");
                         _HttpClientRequestParameters.Remove("encrypt_passconf");
-                        _HttpClientRequestParameters["__csrf_magic"] = String.Empty;
+                        _HttpClientRequestParameters.Remove("__csrf_magic");
                     }
                     else
-                        throw new HttpRequestException("Invalid HTTP Response Message Status Code", null, _httpResponseMessage.StatusCode);
+                        throw new HttpRequestException("Invalid HTTP Response Message", null, _httpResponseMessage.StatusCode);
                 }
                 catch (Exception _Phase3Exception)
                 {
                     _currentDeviceBackup = null;
                     _currentDeviceBackupName = String.Empty;
-                    _HttpClientRequestParameters["__csrf_magic"] = String.Empty;
+                    _HttpClientRequestParameters.Remove("__csrf_magic");
                     Log.Error(_Phase3Exception, $"Backup[{_Device.Name}] Phase 3 - Failed. Reason: See Exception.");
                 }
                 Log.Information($"Backup[{_Device.Name}] Phase 3 - Completed.");
             }
             else
-                Log.Debug($"Backup[{_Device.Name}] Phase 3 - Skipped. Reason: Missing __csrf_magic. Check log for previous errors.");
+                Log.Debug($"Backup[{_Device.Name}] Phase 3 - Skipped. Reason: Check log for previous errors.");
 
             //Phase 4 - Upload to Azure!!!
             Azure.Response<Azure.Storage.Blobs.Models.BlobContentInfo> _blobClientUploadResult = null;
-            if (_currentDeviceBackup != null && !String.IsNullOrWhiteSpace(_currentDeviceBackupName))
+            if (_backupWorkerRunState == BackupWorkerRunState.Phase4)
             {
                 try
                 {
@@ -212,6 +230,7 @@ namespace pfbackupNG
                     if (_blobClientUploadResult != null && _blobClientUploadResult.GetRawResponse().Status == (int)HttpStatusCode.Created)
                     {
                         Log.Debug($"Backup[{_Device.Name}] Phase 4 - pfSense Backup uploaded.");
+                        _backupWorkerRunState = BackupWorkerRunState.Phase5;
                         _currentDeviceBackup = null;
                         _currentDeviceBackupName = String.Empty;
                     }
@@ -225,12 +244,13 @@ namespace pfbackupNG
                     _blobClientUploadResult = null;
                     Log.Error(_Phase4Exception, $"Backup[{_Device.Name}] Phase 4 - Failed. Reason: See Exception.");
                 }
+                Log.Information($"Backup[{_Device.Name}] Phase 4 - Completed.");
             }
             else
                 Log.Debug($"Backup[{_Device.Name}] Phase 4 - Skipped. Reason: Invalid pfSense backup file. Check log for previous errors.");
 
             //Phase 5 - We Prune
-            if (_blobClientUploadResult != null)
+            if (_backupWorkerRunState == BackupWorkerRunState.Phase5)
             {
                 try
                 {
@@ -271,8 +291,11 @@ namespace pfbackupNG
                     _blobClientUploadResult = null;
                     Log.Error(_Phase5Exception, $"Backup[{_Device.Name}] Phase 5 - Failed. Reason: See Exception.");
                 }
+                Log.Information($"Backup[{_Device.Name}] Phase 5 - Completed.");
             }
-            
+            else
+                Log.Debug($"Backup[{_Device.Name}] Phase 5 - Skipped. Reason: pfSense Backup Upload Failed. Check log for previous errors.");
+
             //restart timer
             _globalTimer?.Change(GetTimeLeftTillNextRun(false), Timeout.InfiniteTimeSpan);
         }
